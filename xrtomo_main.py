@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 eps = np.finfo(np.float32).eps
 unit_square = np.array([[-0.5, 0.5], [-0.5, 0.5]])
-ng = 15
+ng = 8
 xs = np.linspace(unit_square[0,0]+1/(2*ng), unit_square[0,1]-1/(2*ng), ng)
 ys = np.linspace(unit_square[1,0]+1/(2*ng), unit_square[1,1]-1/(2*ng), ng)
 x_y_d = [] #coordinates of pixel middle and density
@@ -63,7 +63,6 @@ def perp( a ) :
 
 def plot(startpunkt, endpunkt):
     plt.plot([-0.5, -0.5, 0.5, 0.5, -0.5], [-0.5, 0.5, 0.5, -0.5, -0.5], 'black')
-    gitter_plot()
     plt.plot(x_y_d[:, 0], x_y_d[:, 1], 'o')
     plt.plot([startpunkt[0], endpunkt[0]], [startpunkt[1], endpunkt[1]])
 
@@ -76,15 +75,32 @@ def gitter_plot():
     for y in ys:
         plt.plot([unit_square[0,0], unit_square[0,1]], [y,y], "black")
 
+def get_rot_mat(deg):
+    theta = np.radians(-deg)
+    c, s = np.cos(theta), np.sin(theta)
+    return np.array(((c, -s), (s, c)))
 
 if __name__ == "__main__":
-    startpunkt = np.array([-1, -1])
-    endpunkt = np.array([1.2, 1.3])
-    plot(startpunkt, endpunkt)
-    cut_pixel = get_cut_pixel(startpunkt, endpunkt, x_y_d)
-    for elem in cut_pixel:
-        plt.plot([elem[0][0]], [elem[0][1]], 'or')
-        print(elem)
+    gitter_plot()
+    startpunkt = np.array([-1, 0])
+    endpunkt = np.array([0.5, 1.6])
+    verbindung = endpunkt-startpunkt
+    gesamtwinkel = 100
+    teilwinkel = gesamtwinkel/nw
+    geraden = []
+
+    for i in range(nw):
+        verbindung = np.matmul(get_rot_mat(teilwinkel), verbindung)
+        geraden.append([startpunkt, endpunkt])
+        endpunkt = startpunkt + verbindung
+
+    for gerade in geraden:
+        plot(gerade[0], gerade[1])
+        cut_pixel = get_cut_pixel(gerade[0], gerade[1], x_y_d)
+        print("Die Gerade:" , gerade)
+        print("schneidet" , len(cut_pixel), "Punkte im Gitter")
+        for elem in cut_pixel:
+            plt.plot([elem[0][0]], [elem[0][1]], 'or')
     plt.show()
 
 
