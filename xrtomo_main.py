@@ -62,11 +62,10 @@ def perp( a ) :
     return b
 
 def plot(startpunkt, endpunkt):
-    plt.plot([-0.5, -0.5, 0.5, 0.5, -0.5], [-0.5, 0.5, 0.5, -0.5, -0.5], 'black')
-    plt.plot(x_y_d[:, 0], x_y_d[:, 1], 'o')
-    plt.plot([startpunkt[0], endpunkt[0]], [startpunkt[1], endpunkt[1]])
+    plt.plot([startpunkt[0], endpunkt[0]], [startpunkt[1], endpunkt[1]], 'r')
 
 def gitter_plot():
+    plt.plot(x_y_d[:, 0], x_y_d[:, 1], 'o')
     xs = np.linspace(unit_square[0, 0], unit_square[0, 1], ng+1)
     ys = np.linspace(unit_square[1, 0], unit_square[1, 1], ng+1)
 
