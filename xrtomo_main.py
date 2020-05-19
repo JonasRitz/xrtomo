@@ -4,9 +4,12 @@ plt.rcParams["figure.figsize"] = (10,10)
 plt.xlim((-1.5, 1.5))
 plt.ylim((-1.5, 1.5))
 
-eps = np.finfo(np.float32).eps
+eps = np.finfo(np.float64).eps
 unit_square = np.array([[-0.5, 0.5], [-0.5, 0.5]])
-ng = 10
+ng = 10  # Anzahl der Pixel pro Achse
+ns = 10  # Anzahl der Strahlen
+nw = 4  # Anzahl der Drehwinkel
+
 xs = np.linspace(unit_square[0,0]+1/(2*ng), unit_square[0,1]-1/(2*ng), ng)
 ys = np.linspace(unit_square[1,0]+1/(2*ng), unit_square[1,1]-1/(2*ng), ng)
 x_y_d = [] #coordinates of pixel middle and density
@@ -18,8 +21,6 @@ for x in xs:
 x_y_d = np.array(x_y_d)
 cell_width = 1/ng
 cell_height = 1/ng
-
-
 
 def get_cut_pixel(startpkt, endpkt, x_y_d): # gibt die pixel an, die von der Gerade geschnitten werden
     # liste aus (xkoord, ykoord, länge des schnitts, dichte des pixels)
@@ -82,42 +83,12 @@ def get_rot_mat(deg):
     c, s = np.cos(theta), np.sin(theta)
     return np.array(((c, -s), (s, c)))
 
-def Pseudo(A):
-    U, s, Vt = np.linalg.svd(A, full_matrices=True)
-    #print(U.shape)
-    #print(s.shape)
-    #print(Vt.shape)
-    eps_2 = 10**(-5)
-    for idx, sv in enumerate(s):
-        if sv/s[0] < eps_2:
-            s[idx] = 0
-    for idx, sv in enumerate(s):
-        if s[idx] != 0:
-            s[idx] = 1/s[idx]
 
-    smat = np.zeros((100, 112))
-    smat[:100, :100] = np.diag(s)
-    tmp = np.matmul(Vt.T, smat)
-    Aplus = np.matmul(tmp, U.T)
-    #return np.linalg.pinv(A)
-    return Aplus
-
-if __name__ == "__main__":
-    startpunkt = np.array([-1, 0])
-    endpunkt = np.array([0.5, 1.6])
+def gen_matrix(startpunkt, endpunkt):
     verbindung = endpunkt-startpunkt
-    gitter_plot()
-    radius = 1
-    winkel_strahlen = 30
-    winkel_ink = 10
-    ns = 16 #Anzahl der Strahlen
-    nw = 7 # Anzahl der Drehwinkel
-    teilwinkel = winkel_strahlen/ns
-    geraden = []
-
-    mat = np.zeros((ns*nw,ng*ng))
-    dichten = np.ones(ng*ng)
+    mat = np.zeros((ns*nw,ng*ng), dtype='float64')
     strahlidx = 0
+    geraden = []
     for i in range(nw):
         erster_strahl = endpunkt-startpunkt
         for i in range(ns):
@@ -135,16 +106,56 @@ if __name__ == "__main__":
         endpunkt = startpunkt + verbindung
         geraden = []
     plt.show()
-    #print(mat)
+    return mat
+
+
+def Pseudo(A, alpha):
+    U, s, Vt = np.linalg.svd(A, full_matrices=True)
+    for idx, sv in enumerate(s):
+        if sv < alpha:
+            s[idx] = 0
+    for idx, sv in enumerate(s):
+        if s[idx] != 0:
+            s[idx] = 1/s[idx]
+    smat = np.zeros((ng**2, ns * nw))
+    smat[:ns  * nw, :ng**2] = np.diag(s)
+    tmp = np.matmul(Vt.T, smat)
+    Aplus = np.matmul(tmp, U.T)
+    return Aplus
+
+# besser: S.33 gleichung und dann einfach linalg.solve
+def Tikhonov(A, alpha, y):
+    AtA = np.matmul(A.T, A)
+    alphaI = alpha*np.identity(len(AtA))
+    ges = AtA + alphaI
+    rs = np.matmul(A.T,y)
+    x_alpha = np.linalg.solve(ges, rs)
+    return x_alpha
+
+def solve_backwards(mat, sinogramm):
     print("Kondition:", np.linalg.cond(mat))
-    sinogramm = np.matmul(mat, dichten)
-    #pinv = np.linalg.pinv(mat)
-    pinv = Pseudo(mat)
-    dichte = np.matmul(pinv, sinogramm)
-    print("Dichte")
-    print(dichte)
-    print("fehler:", np.linalg.norm(dichte-dichten))
-    print("Rel. fehler:", np.linalg.norm(dichte - dichten)/np.linalg.norm(dichten))
+    #pinv = Pseudo(mat, 0.1)
+    #dichte = np.matmul(pinv, sinogramm)
+    #print("Dichte ausgerechnet TSVD:", dichte)
+    dichte = Tikhonov(mat, 0.005, sinogramm)
+    return dichte
+    
 
-    #print(sinogramm)
-
+if __name__ == "__main__":
+    startpunkt = np.array([-1, 0])
+    endpunkt = np.array([0.5, 1.6])
+    gitter_plot()
+    radius = 1
+    winkel_strahlen = 30
+    winkel_ink = 23
+    teilwinkel = winkel_strahlen/ns
+    mat = gen_matrix(startpunkt,endpunkt)
+    dichte_original = np.ones(ng*ng, dtype='float64')
+    sinogramm = np.matmul(mat, dichte_original)
+    mu, sigma = 0, 0.01
+    stoerung = np.random.normal(mu, sigma, len(sinogramm))
+    sinogramm = sinogramm + stoerung
+    dichte_berechnet = solve_backwards(mat, sinogramm)
+    print("Fehler:", np.linalg.norm(dichte_original - dichte_berechnet))
+    print("Rel. fehler:", np.linalg.norm(dichte_original - dichte_berechnet) / np.linalg.norm(dichte_berechnet))
+   
