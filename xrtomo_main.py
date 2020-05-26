@@ -1,14 +1,16 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 plt.rcParams["figure.figsize"] = (10,10)
 plt.xlim((-1.5, 1.5))
 plt.ylim((-1.5, 1.5))
-
 eps = np.finfo(np.float64).eps
 unit_square = np.array([[-0.5, 0.5], [-0.5, 0.5]])
 ng = 10  # Anzahl der Pixel pro Achse
 ns = 10  # Anzahl der Strahlen
-nw = 4  # Anzahl der Drehwinkel
+nw = 20  # Anzahl der Drehwinkel
+angle = 360
+
 
 xs = np.linspace(unit_square[0,0]+1/(2*ng), unit_square[0,1]-1/(2*ng), ng)
 ys = np.linspace(unit_square[1,0]+1/(2*ng), unit_square[1,1]-1/(2*ng), ng)
@@ -17,7 +19,6 @@ x_y_d = [] #coordinates of pixel middle and density
 for x in xs:
     for y in ys:
         x_y_d.append(np.array([x, y, 0]))
-
 x_y_d = np.array(x_y_d)
 cell_width = 1/ng
 cell_height = 1/ng
@@ -59,7 +60,7 @@ def seg_intersect(a1, a2, b1, b2) :
     else:
         return (num / denom.astype(float))*db + b1
 
-def perp( a ) :
+def perp(a) :
     b = np.empty_like(a)
     b[0] = -a[1]
     b[1] = a[0]
@@ -83,18 +84,22 @@ def get_rot_mat(deg):
     c, s = np.cos(theta), np.sin(theta)
     return np.array(((c, -s), (s, c)))
 
-
-def gen_matrix(startpunkt, endpunkt):
-    verbindung = endpunkt-startpunkt
+def gen_matrix():
+    startpunkt = np.array([-1, 0])
+    endpunkt = np.array([0.0, 0.0])
     mat = np.zeros((ns*nw,ng*ng), dtype='float64')
     strahlidx = 0
     geraden = []
+    step = angle/nw
+    winkel_strahlen = 30
+    teilwinkel = winkel_strahlen/ns
+    mittelstrahl = endpunkt - startpunkt
     for i in range(nw):
-        erster_strahl = endpunkt-startpunkt
-        for i in range(ns):
-            verbindung = np.matmul(get_rot_mat(teilwinkel), verbindung)
-            geraden.append([startpunkt, endpunkt])
-            endpunkt = startpunkt + verbindung
+        for i in range(-ns//2, ns//2):
+            aktstrahl = np.matmul(get_rot_mat(i*teilwinkel), mittelstrahl)
+            aktstrahl = (aktstrahl/np.linalg.norm(aktstrahl)) * 1.7
+            endpunkt_tmp = startpunkt + aktstrahl
+            geraden.append([startpunkt, endpunkt_tmp])
         for gerade in geraden:
             plot(gerade[0], gerade[1])
             cut_pixel = get_cut_pixel(gerade[0], gerade[1], x_y_d)
@@ -102,28 +107,44 @@ def gen_matrix(startpunkt, endpunkt):
                 mat[strahlidx, elem[2]] = elem[1]
                 plt.plot([elem[0][0]], [elem[0][1]], 'or')
             strahlidx +=1
-        verbindung = np.matmul(get_rot_mat(winkel_ink), erster_strahl)
-        endpunkt = startpunkt + verbindung
+        mittelstrahl = np.matmul(get_rot_mat(step), mittelstrahl)
+        startpunkt = endpunkt - mittelstrahl
         geraden = []
     plt.show()
     return mat
 
+def get_dichte_homogen():
+    dichte = np.ones(ng * ng, dtype='float64')
+    return dichte
 
-def Pseudo(A, alpha):
+def get_dichte_inhomogen():
+    return np.array([1, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+                     1, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                     1, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                     1, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                     1, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                     1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                     0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+                     0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+                     0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+                     1, 1, 1, 1, 1, 0, 0, 0, 0, 1])
+
+def TSVD(A, alpha):
     U, s, Vt = np.linalg.svd(A, full_matrices=True)
-    for idx, sv in enumerate(s):
-        if sv < alpha:
-            s[idx] = 0
-    for idx, sv in enumerate(s):
-        if s[idx] != 0:
-            s[idx] = 1/s[idx]
-    smat = np.zeros((ng**2, ns * nw))
-    smat[:ns  * nw, :ng**2] = np.diag(s)
-    tmp = np.matmul(Vt.T, smat)
-    Aplus = np.matmul(tmp, U.T)
-    return Aplus
+    plt.plot(np.log(s))
+    plt.show()
+    #for idx, sv in enumerate(s):
+    #    if sv < alpha:
+    #        s[idx] = 0
+    #for idx, sv in enumerate(s):
+    #    if s[idx] != 0:
+    #        s[idx] = 1/s[idx]
+    #smat = np.zeros((ng**2, ns * nw))
+    #smat[:ns  * nw, :ng**2] = np.diag(s)
+    #tmp = np.matmul(Vt.T, smat)
+    #Aplus = np.matmul(tmp, U.T)
+    #return Aplus
 
-# besser: S.33 gleichung und dann einfach linalg.solve
 def Tikhonov(A, alpha, y):
     AtA = np.matmul(A.T, A)
     alphaI = alpha*np.identity(len(AtA))
@@ -132,30 +153,47 @@ def Tikhonov(A, alpha, y):
     x_alpha = np.linalg.solve(ges, rs)
     return x_alpha
 
-def solve_backwards(mat, sinogramm):
-    print("Kondition:", np.linalg.cond(mat))
-    #pinv = Pseudo(mat, 0.1)
-    #dichte = np.matmul(pinv, sinogramm)
-    #print("Dichte ausgerechnet TSVD:", dichte)
-    dichte = Tikhonov(mat, 0.005, sinogramm)
+def solve_backwards(mat, sinogramm, alpha):
+    dichte = Tikhonov(mat, alpha, sinogramm)
     return dichte
-    
+
+def plot_dichte(dichte):
+    size = 0.1
+    fig2 = plt.figure()
+    ax2 = fig2.add_subplot(111, aspect='equal')
+    for i in range(ng):
+        for j in range(ng):
+            vec = np.array([dichte[i*ng+j], dichte[i*ng+j],dichte[i*ng+j]])
+            min = np.min(vec)
+            max = np.max(vec)
+            if max != min:
+                vec = (vec -min )/(max-min)
+            elif max < 0:
+                vec = np.array([0,0,0])
+            elif max > 1:
+                vec = np.array([1,1,1])
+            print(vec)
+            color =  (vec[0], vec[1], vec[2])
+            ax2.add_patch(Rectangle((size*i, size*j), size, size, fill=True, color=color))
+    plt.show()
 
 if __name__ == "__main__":
-    startpunkt = np.array([-1, 0])
-    endpunkt = np.array([0.5, 1.6])
     gitter_plot()
-    radius = 1
-    winkel_strahlen = 30
-    winkel_ink = 23
-    teilwinkel = winkel_strahlen/ns
-    mat = gen_matrix(startpunkt,endpunkt)
-    dichte_original = np.ones(ng*ng, dtype='float64')
+    mat = gen_matrix()
+    TSVD(mat, 0)
+    dichte_original = get_dichte_inhomogen()
+    plot_dichte(dichte_original)
     sinogramm = np.matmul(mat, dichte_original)
-    mu, sigma = 0, 0.01
-    stoerung = np.random.normal(mu, sigma, len(sinogramm))
-    sinogramm = sinogramm + stoerung
-    dichte_berechnet = solve_backwards(mat, sinogramm)
+    sigma_quad = 0.0001
+    stoerung = np.sqrt(sigma_quad) * np.random.randn(len(sinogramm))
+    sinogramm_gestoert = sinogramm + stoerung
+    alpha = np.sqrt(sigma_quad/len(sinogramm))
+    dichte_berechnet = solve_backwards(mat, sinogramm_gestoert, alpha)
+    #dichte_berechnet_alpha_0 = solve_backwards(mat, sinogramm_gestoert, 1e-16)
+    plot_dichte(dichte_berechnet)
     print("Fehler:", np.linalg.norm(dichte_original - dichte_berechnet))
     print("Rel. fehler:", np.linalg.norm(dichte_original - dichte_berechnet) / np.linalg.norm(dichte_berechnet))
-   
+    plt.plot(dichte_original, 'b')
+    plt.plot(dichte_berechnet, 'r')
+    #plt.plot(dichte_berechnet_alpha_0, 'g')
+    plt.show()
